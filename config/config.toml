@@ -1,0 +1,19 @@
+# 绘图配置文件
+[zone_config]
+# 大区域设置
+lat_min = 20
+lat_max = 35
+lon_min = 120
+lon_max = 150
+# 放大区域设置
+lat_min_zoom = 28
+lat_max_zoom = 32
+lon_min_zoom = 128
+lon_max_zoom = 132
+
+[line_config]
+# 起止点位置配置
+start_lon = 129.5
+start_lat = 28.4
+end_lon = 130.6
+end_lat = 31

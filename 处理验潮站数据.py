@@ -1,0 +1,76 @@
+import openpyxl
+import glob, os, pathlib
+import numpy as np
+import pandas as pd
+
+workbook = openpyxl.load_workbook('验潮站标准水位.xlsx')
+# 读取站号
+storage_paths = sorted(glob.glob(r'D:\Documents\Data\JODC\验潮站数据\*'))
+for i_storage_path,storage_path in enumerate(storage_paths):
+    if os.path.isdir(storage_path):
+        sta_id = pathlib.Path(storage_path).stem
+        print(sta_id)
+        # 读取基准水位
+        worksheet = workbook[sta_id]
+        begin_row = np.nan
+        for i_row in range(1,worksheet.max_row+1):
+            if worksheet.cell(row=i_row, column=1).value == 'Date':
+                begin_row = i_row
+                break
+        year = []
+        water_lift = []
+        i_water = 0
+        for i_row in range(begin_row,worksheet.max_row+1):
+            year_temp = worksheet.cell(row=i_row, column=1).value
+            if year_temp=='':
+                i_water += 1
+                continue
+            else:
+                year.append([])
+                water_lift.append([])
+                i_water = 0
+    # 读取水位信息
+    files = glob.glob(os.path.join(storage_path,'*.txt'))
+    dataframe = pd.DataFrame()
+    dataframe['站号'] = ''
+    dataframe['时间'] = ''
+    dataframe['水位'] = ''
+    i_row = 0
+    for file in files:
+        with open(file,'r') as fin:
+            # 获取总长度
+            text = fin.read()
+            char_count = len(text)
+            fin.seek(0)
+            i_count = 0
+            i_hour = 0
+            date = ''
+            data = ''
+            while i_count < char_count:
+                temp = fin.read(1)
+                if temp == ',':
+                    if i_hour == 0: # 站号
+                        sta_id = data
+                    elif i_hour ==1:# 日期
+                        date = data
+                    else:   # 0、1为站号和日期
+                        dataframe.loc[i_row,'站号'] = sta_id
+                        dataframe.loc[i_row,'时间'] = date+' '+f"{i_hour-2:02d}"+":00:00"
+                        dataframe.loc[i_row,'水位'] = data
+                        i_row +=1
+                    data = ''
+                    i_hour += 1     # 小时+1(-2为最终真实时间)
+                    i_count +=1
+                elif temp == '\n':
+                    dataframe.loc[i_row,'站号'] = sta_id
+                    dataframe.loc[i_row,'时间'] = date+' '+f"{i_hour-2:02d}"+":00:00"
+                    dataframe.loc[i_row,'水位'] = data
+                    i_row +=1
+                    data = ''
+                    date = ''
+                    i_hour = 0      # 换行表示时间为0时
+                    i_count +=1
+                else:
+                    data += temp
+                    i_count +=1
+        print(1)
