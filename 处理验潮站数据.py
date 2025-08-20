@@ -12,22 +12,44 @@ for i_storage_path,storage_path in enumerate(storage_paths):
         print(sta_id)
         # 读取基准水位
         worksheet = workbook[sta_id]
+        # 获取基准高度行数
         begin_row = np.nan
         for i_row in range(1,worksheet.max_row+1):
             if worksheet.cell(row=i_row, column=1).value == 'Date':
                 begin_row = i_row
                 break
-        year = []
-        water_lift = []
-        i_water = 0
+        dataframe_fix = pd.DataFrame()
+        dataframe_fix['Time'] = ''
+        dataframe_fix['latitude'] = ''
+        dataframe_fix['longitude'] = ''
+        dataframe_fix['bench mark'] = ''
+        dataframe_fix['standard mark'] = ''
+        dataframe_fix['Tokyo Peil'] = ''
+        # 读取
         for i_row in range(begin_row,worksheet.max_row+1):
             year_temp = worksheet.cell(row=i_row, column=1).value
-            if year_temp=='':
-                i_water += 1
-                continue
-            else:
-                year.append([])
-                water_lift.append([])
+            if year_temp=='':                       # 没有年份/日期
+                temp = worksheet.cell(row=i_row, column=2).value
+                if 'Zero of Tide Height' in temp:   # 基准水位行
+                    if 'bench mark':                # 局部基准点
+                        dataframe_fix['']
+                    elif 'standard mark':           # 全局基准点
+                        dataframe_fix['']
+                    elif 'Tokyo Peil' or 'T.P.':    # 东京
+                        dataframe_fix['']
+                    else:
+
+                elif 'Station Position' in temp:    # 站位信息
+                    datas = temp.split(' ')
+                    for i_data,data in enumerate(datas):
+                        if data == 'N':
+                            latitude = datas[i_data-1]
+                        elif data == 'E':
+                            longitude = datas[i_data-1]
+                else:                               # 其他
+                    continue
+            else:                                   # 有年份/日期
+
                 i_water = 0
     # 读取水位信息
     files = glob.glob(os.path.join(storage_path,'*.txt'))
