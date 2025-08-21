@@ -1,4 +1,9 @@
 # 绘图配置文件
+[file_config]
+fvcom_file = '/home/yzbsj/文档/FVCOM/kuroshio_2024_0717/kuroshio_2024_0717.nc'
+polygon_file = '/home/yzbsj/Data/其他数据/land-polygons-complete-4326/land_polygons.shp'
+
+
 [zone_config]
 # 大区域设置
 lat_min = 20

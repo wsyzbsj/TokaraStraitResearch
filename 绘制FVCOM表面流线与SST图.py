@@ -13,6 +13,10 @@ from shapely.strtree import STRtree
 import matplotlib.path as mpath
 from matplotlib.patches import Rectangle
 from scipy.ndimage import gaussian_filter
+import os
+
+# 确保输出目录存在
+os.makedirs("output/FVCOM", exist_ok=True)
 
 # 设置
 config = toml.load('config/config.toml')
@@ -25,7 +29,7 @@ lat_min = config['zone_config']['lat_min_zoom']
 lat_max = config['zone_config']['lat_max_zoom']
 
 # 读取流场数据
-dataset = netCDF4.Dataset(r'D:\Documents\code\Pycharm\FVCOM_analysis\kuroshio_2024_0717\kuroshio_2024_0717.nc', 'r')
+dataset = netCDF4.Dataset(config['file_config']['fvcom_file'], 'r')
 nv = dataset.variables['nv'][:]
 time = dataset.variables['time'][0]
 lat = dataset.variables['lat'][:]
@@ -44,10 +48,10 @@ temp = dataset.variables['temp'][:,0,:]  # 表面温度
 print('创建网格')
 lon_min, lon_max = 128.5, 132.5
 lat_min, lat_max = 28, 32
-grid_x, grid_y = np.mgrid[lon_min:lon_max:250j, lat_min:lat_max:250j]  # 250j分辨率
+grid_x, grid_y = np.mgrid[lon_min:lon_max:1000j, lat_min:lat_max:1000j]  # 250j分辨率
 
 print('读取海岸线数据')
-shp_path = r'D:\Documents\Data\海岸线数据\land_polygons.shp'
+shp_path = config['file_config']['polygon_file']
 reader = shpreader.Reader(shp_path)
 
 # 创建空间索引
@@ -160,9 +164,9 @@ for i_time in range(u.shape[0]):
     grid_v[land_mask] = np.nan
     grid_speed[land_mask] = np.nan
 
-    # 平滑流速场 - 使用更强的平滑减少不连续性
-    grid_u_smooth = gaussian_filter(grid_u, sigma=1.5)
-    grid_v_smooth = gaussian_filter(grid_v, sigma=1.5)
+    # 平滑流速场 - 使用适中的平滑减少不连续性
+    grid_u_smooth = gaussian_filter(grid_u, sigma=1.0)
+    grid_v_smooth = gaussian_filter(grid_v, sigma=1.0)
     grid_speed_smooth = np.sqrt(grid_u_smooth**2 + grid_v_smooth**2)
 
     # 绘制温度填色图 - 设置在最底层
@@ -184,62 +188,87 @@ for i_time in range(u.shape[0]):
         ax.add_geometries(
             [geom],
             crs=ccrs.PlateCarree(),
-            facecolor='none',  # 移除填充
+            facecolor='lightgray',  # 移除填充
             edgecolor='black',  # 保留黑色边界
-            zorder=5
+            zorder=10
         )
 
     # 创建海洋掩膜（非陆地）
     ocean_mask = ~land_mask
 
-    # 创建海洋区域的流速网格（陆地区域设为0）
-    grid_u_ocean = np.where(ocean_mask, grid_u_smooth, 0)
-    grid_v_ocean = np.where(ocean_mask, grid_v_smooth, 0)
+    # 创建海洋区域的流速网格（陆地区域设为np.nan）
+    grid_u_ocean = np.where(ocean_mask, grid_u_smooth, np.nan)
+    grid_v_ocean = np.where(ocean_mask, grid_v_smooth, np.nan)
 
-    # 创建基于速度的流线密度分布
-    # 在高速区域增加密度，在低速区域减少密度
-    speed_normalized = grid_speed_smooth / np.nanmax(grid_speed_smooth)
+    # 确保grid_speed_smooth中没有NaN值
+    grid_speed_smooth_filled = np.nan_to_num(grid_speed_smooth, nan=np.nan)
 
-    # 创建均匀分布的流线起点
-    num_start_points = 300  # 减少起点数量
-    start_x = np.random.uniform(lon_min, lon_max, num_start_points)
-    start_y = np.random.uniform(lat_min, lat_max, num_start_points)
+    # 使用基于流速的加权采样生成起点 - 流速越快的地方起点越少，但不是完全没有
+    num_start_points = 200  # 起点数量
+    ocean_points = np.column_stack([grid_x[ocean_mask], grid_y[ocean_mask]])
+    ocean_speeds = grid_speed_smooth_filled[ocean_mask]
 
-    # 过滤掉陆地上的起点
-    valid_start_points = []
-    for x, y in zip(start_x, start_y):
-        # 找到最近的网格点
-        i = np.argmin(np.abs(grid_x[:,0] - x))
-        j = np.argmin(np.abs(grid_y[0,:] - y))
-        if ocean_mask[i, j]:
-            valid_start_points.append([x, y])
+    # 确保没有NaN值
+    ocean_speeds = np.nan_to_num(ocean_speeds, nan=np.nan)
 
-    start_points = np.array(valid_start_points)
+    # 计算权重：使用非线性函数，确保高速区域也有一定数量的起点
+    max_speed = np.max(ocean_speeds) if np.max(ocean_speeds) > 0 else 1.0
+
+    # 使用S形函数来平衡权重分布
+    # 这个函数在低速区域权重较高，高速区域权重较低，但不会降到0
+    def sigmoid_weight(speed, max_speed):
+        # 将速度归一化到0-1范围
+        normalized_speed = speed / max_speed
+        # 使用S形函数的反函数，使高速区域权重降低但不会为0
+        return 1.0 / (1.0 + np.exp(5.0 * (normalized_speed - 0.5)))
+
+    weights = sigmoid_weight(ocean_speeds, max_speed)
+
+    # 如果所有权重都是0，则使用均匀分布
+    if np.sum(weights) == 0:
+        weights = np.ones_like(weights)
+
+    weights = weights / np.sum(weights)  # 归一化
+
+    # 根据权重采样
+    if len(ocean_points) > num_start_points:
+        try:
+            selected_indices = np.random.choice(
+                len(ocean_points),
+                size=num_start_points,
+                replace=False,
+                p=weights
+            )
+            start_points = ocean_points[selected_indices]
+        except ValueError as e:
+            print(f"权重采样错误: {e}, 使用均匀采样")
+            selected_indices = np.random.choice(
+                len(ocean_points),
+                size=min(num_start_points, len(ocean_points)),
+                replace=False
+            )
+            start_points = ocean_points[selected_indices]
+    else:
+        start_points = ocean_points
 
     # 绘制连续流线图
     if len(start_points) > 0:
-        # 根据速度设置线宽
-        linewidths = np.ones_like(grid_speed_smooth) * 1.0  # 基本宽度
-
-        # 在高速区域增加线宽
-        high_speed_mask = grid_speed_smooth > 0.3 * np.nanmax(grid_speed_smooth)
-        linewidths[high_speed_mask] = 1.5
-
+        # 使用黑色流线，固定颜色
         stream = ax.streamplot(
             grid_x[:,0],  # x坐标（一维）
             grid_y[0,:],  # y坐标（一维）
             grid_u_ocean.T,  # 注意：需要转置以匹配streamplot的输入要求
             grid_v_ocean.T,
             color='black',  # 所有流线设为黑色
-            linewidth=linewidths.T,  # 使用基于速度的线宽
+            linewidth=1.2,  # 线宽
             arrowsize=1.0,  # 箭头大小
             arrowstyle='->',  # 箭头样式
-            minlength=0.01,  # 最小流线长度
-            maxlength=20.0,  # 最大流线长度
+            minlength=0.1,  # 最小流线长度
+            maxlength=100.0,  # 最大流线长度
             integration_direction='both',  # 双向积分
-            start_points=start_points,  # 使用均匀分布的起点
+            start_points=start_points,  # 使用加权采样的起点
             broken_streamlines=False,    # 确保流线连续不断开
-            density=1.0,  # 固定密度值
+            density=1.2,  # 适中的密度值
             transform=proj,
             zorder=4
         )
