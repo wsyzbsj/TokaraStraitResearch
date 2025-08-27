@@ -13,7 +13,7 @@ string_html_url_subfix = "_e.htm"
 workbook = openpyxl.Workbook()
 
 # 读取站号
-storage_paths = sorted(glob.glob(r'D:\Documents\Data\JODC\验潮站数据\*'))
+storage_paths = sorted(glob.glob('/home/yzbsj/Data/海洋数据/JODC/验潮站数据/*'))
 for i_storage_path,storage_path in enumerate(storage_paths):
     if os.path.isdir(storage_path):
         sta_id = pathlib.Path(storage_path).stem

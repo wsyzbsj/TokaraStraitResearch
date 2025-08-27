@@ -29,9 +29,15 @@ lon_min = config['zone_config']['lon_min_zoom']
 lon_max = config['zone_config']['lon_max_zoom']
 lat_min = config['zone_config']['lat_min_zoom']
 lat_max = config['zone_config']['lat_max_zoom']
+proj = ccrs.PlateCarree()
+
+# 将经纬度转换为投影坐标（等效于 m_ll2xy）
+def lonlat_to_xy(lon, lat, projection=proj):
+    """将经纬度坐标转换为投影坐标"""
+    return projection.transform_points(ccrs.PlateCarree(), np.array(lon), np.array(lat))
 
 def id2axis(distance,id):
-    n=np.ceil((0.5-distance/2)/distance)*2+1        # 分割的数量
+    n=int(np.ceil((0.5-distance/2)/distance)*2+1)        # 分割的数量
     min_distance=(1-(n-2)*distance)/2               # 两端最小的距离
     if id==1:
         xpoint=min_distance/2
@@ -62,7 +68,7 @@ def sub2ind(sizeArray, *subs):
     return ind + 1
 
 def axis2id(x,y,distance):
-    N=np.ceil((0.5-distance/2)/distance)*2+1                                                                            # 分割的数量
+    N=int(np.ceil((0.5-distance/2)/distance)*2+1)                                                                       # 分割的数量
     min_distance=(1-(N-2)*distance)/2                                                                                   # 两端最小的距离
 
     # x的位置
@@ -71,7 +77,7 @@ def axis2id(x,y,distance):
     elif x>=1-min_distance:
         pos_id_x=N
     else:
-        pos_id_x=np.ceil((x-min_distance)/distance)+1
+        pos_id_x=int(np.ceil((x-min_distance)/distance)+1)
 
     # y的位置
     if y<=min_distance:
@@ -79,7 +85,7 @@ def axis2id(x,y,distance):
     elif y>=1-min_distance:
         pos_id_y=N
     else:
-        pos_id_y=np.ceil((y-min_distance)/distance)+1
+        pos_id_y=int(np.ceil((y-min_distance)/distance)+1)
 
     # xy转ind
     pos_id=sub2ind([N,N],pos_id_y,pos_id_x)
@@ -154,7 +160,7 @@ def matlab_histcounts_indices(data, bins):
 
     return indices
 
-def my_streamline_mutli(x,y,u,v,dstart,num,magnify) -> list:
+def my_streamline_mutli(x,y,u,v,dstart:float,num:int,magnify:int) -> list:
     streamline_sum = []
     dend = 0.5*dstart
     xmin=x.min()
@@ -168,8 +174,8 @@ def my_streamline_mutli(x,y,u,v,dstart,num,magnify) -> list:
     un=u/(xmax-xmin)
     vn=v/(ymax-ymin)
 
-    num_start=np.ceil((0.5-dstart/2)/dstart)*2+1
-    num_end=np.ceil((0.5-dend/2)/dend)*2+1
+    num_start=int(np.ceil((0.5-dstart/2)/dstart)*2+1)
+    num_end=int(np.ceil((0.5-dend/2)/dend)*2+1)
 
     # 初始化所有网格点，0代表可以放置新点，1代表已经存在原有的点
     xy_start = np.zeros((num_start,num_start),dtype=float)
@@ -180,24 +186,30 @@ def my_streamline_mutli(x,y,u,v,dstart,num,magnify) -> list:
     zy = np.linspace(0,1,xy_start.shape[0])
     zx = np.linspace(0,1,xy_start.shape[1])
     zxx,zyy = np.meshgrid(zx,zy)
-    # 原本插值:xy_start = np.interp2(xn,yn,mask,zxx,zyy)
+    # 原本插值:xy_start = interp2(xn,yn,mask,zxx,zyy)
     # 创建插值器
-    interpolator = RegularGridInterpolator((yn[:, 0], xn[0, :]), mask, method='linear', bounds_error=False, fill_value=np.nan)
+    interpolator = RegularGridInterpolator((yn[0, :], xn[:, 0]), mask, method='linear', bounds_error=False, fill_value=np.nan)
     # 进行插值
     xy_start = interpolator((zyy, zxx))  # 注意坐标顺序
 
     py_in = np.where(xy_start.flatten(order='C')>0)
-    xy_start[py_in] = 1
+    for i_py_in in py_in:
+        i_x = i_py_in//xy_start.shape[1]
+        i_y = i_py_in%xy_start.shape[1]
+        xy_start[i_x,i_y] = 1
     zy = np.linspace(0,1,xy_end.shape[0])
     zx = np.linspace(0,1,xy_end.shape[1])
     zxx,zyy = np.meshgrid(zx,zy)
-    # 原本的插值:xy_end = np.interp2(xn,yn,mask,zxx,zyy)
+    # 原本的插值:xy_end = interp2(xn,yn,mask,zxx,zyy)
     # 创建插值器
-    interpolator = RegularGridInterpolator((yn[:, 0], xn[0, :]), mask, method='linear', bounds_error=False, fill_value=np.nan)
+    interpolator = RegularGridInterpolator((yn[0, :], xn[:, 0]), mask, method='linear', bounds_error=False, fill_value=np.nan)
     # 进行插值
     xy_end = interpolator((zyy, zxx))  # 注意坐标顺序
     py_in = np.where(xy_end.flatten(order='C')>0)
-    xy_end[py_in] = 1
+    for i_py_in in py_in:
+        i_x = i_py_in//xy_end.shape[1]
+        i_y = i_py_in%xy_end.shape[1]
+        xy_end[i_x,i_y] = 1
 
     # 将流线划分为num种，速度越大的流线越长
     length_sl=np.linspace(5,40,num)                                                                                     # 按速度分类
@@ -214,18 +226,20 @@ def my_streamline_mutli(x,y,u,v,dstart,num,magnify) -> list:
         # 2. 随机一个start内网格点作为种子点
         [start_id_y,start_id_x]=np.where(xy_start==0)
         randnum=np.random.randint(1, start_id_y.shape[0]+1)
-        x_pos_i=id2axis(dstart,start_id_x[randnum,0])
-        y_pos_i=id2axis(dstart,start_id_y[randnum,0])
-        streamline_seed[k].append([x_pos_i,y_pos_i])                                                                    # 保存种子点
-        # 原本的插值:V2_seed=np.interp2(xn,yn,V2,x_pos_i,y_pos_i)                                                            # 计算种子点处的速度
+        x_pos_i=id2axis(dstart,start_id_x[randnum])
+        y_pos_i=id2axis(dstart,start_id_y[randnum])
+        streamline_seed.append([x_pos_i,y_pos_i])                                                                       # 保存种子点
+        # 原本的插值:V2_seed=interp2(xn,yn,V2,x_pos_i,y_pos_i)                                                               # 计算种子点处的速度
         # 创建插值器
-        interpolator = RegularGridInterpolator((yn[:, 0], xn[0, :]), V2, method='linear', bounds_error=False, fill_value=np.nan)
+        interpolator = RegularGridInterpolator((yn[0, :], xn[:, 0]), V2, method='linear', bounds_error=False, fill_value=np.nan)
         # 进行插值
         V2_seed = interpolator((zyy, zxx))  # 注意坐标顺序
         sl_N = matlab_histcounts_indices(V2_seed, V2_space)
         # [~,~,sl_N] = histcounts(V2_seed,V2_space)
-        if sl_N==0 or np.isnan(sl_N):
-            sl_N =5
+        for i_x in range(sl_N.shape[0]):
+            for i_y in range(sl_N.shape[1]):
+                if sl_N[i_x,i_y]==0 or np.isnan(sl_N[i_x,i_y]):
+                    sl_N[i_x,i_y] = 5
 
         num_streamline=round(length_sl[sl_N]) * magnify                                                                 # 流线总数量
 
@@ -241,8 +255,8 @@ def my_streamline_mutli(x,y,u,v,dstart,num,magnify) -> list:
             return [u_val, v_val]
 
         # 创建速度场插值器
-        interpolator_u = RegularGridInterpolator((yn[:,0], xn[0,:]), un.T)
-        interpolator_v = RegularGridInterpolator((yn[:,0], xn[0,:]), vn.T)
+        interpolator_u = RegularGridInterpolator((yn[0,:], xn[:,0]), un.T)
+        interpolator_v = RegularGridInterpolator((yn[0,:], xn[:,0]), vn.T)
 
         # 计算正向流线（类似 streamline_i_1）
         t1 = np.linspace(0, num_streamline/10, num_streamline*10)
@@ -257,11 +271,12 @@ def my_streamline_mutli(x,y,u,v,dstart,num,magnify) -> list:
         # 5. 保存
         streamline_k=[streamline_i_2.flipud(),streamline_i_1[:,:]]                                                      # 新的流线
         streamline_sum.append([])
-        streamline_sum[k]=[xmin+streamline_k[:][0]*(xmax-xmin), ymin+streamline_k[:][1]*(ymax-ymin)]                      # 从归一化还原
+        streamline_sum[k]=[xmin+streamline_k[:][0]*(xmax-xmin), ymin+streamline_k[:][1]*(ymax-ymin)]                    # 从归一化还原
         k += 1
-    streamline_seed=[streamline_seed[:][0]*(xmax-xmin)+xmin, streamline_seed[:][1]*(ymax-ymin)+ymin]
-
-    return [streamline_sum,streamline_seed]
+    streamline_seed = np.array(streamline_seed)
+    streamline_sum = np.array(streamline_sum)
+    streamline_seed=[streamline_seed[:,0]*(xmax-xmin)+xmin, streamline_seed[:,1]*(ymax-ymin)+ymin]
+    return streamline_sum,streamline_seed
 
 # 读取流场数据
 dataset = netCDF4.Dataset(config['file_config']['fvcom_file'], 'r')
@@ -279,9 +294,9 @@ zeta = dataset.variables['zeta'][:]  # 水位
 siglay = dataset.variables['siglay'][:]  # sigma层
 temp = dataset.variables['temp'][:,0,:]  # 表面温度
 
-# 创建规则网格 - 保持较高分辨率但减少流线密度
+# 创建规则网格
 print('创建网格')
-grid_x, grid_y = np.mgrid[lon_min:lon_max:1000j, lat_min:lat_max:1000j]  # 250j分辨率
+grid_x, grid_y = np.mgrid[lon_min:lon_max:200j, lat_min:lat_max:200j]  # 分辨率
 
 print('读取海岸线数据')
 shp_path = config['file_config']['polygon_file']
@@ -360,7 +375,6 @@ for i_time in range(len(times)):
 
 # 设置投影和范围
 print('设置投影与绘图范围')
-proj = ccrs.PlateCarree()
 extents = [lon_min, lon_max, lat_min, lat_max]
 
 for i_time in range(u.shape[0]):
@@ -397,11 +411,6 @@ for i_time in range(u.shape[0]):
     grid_v[land_mask] = np.nan
     grid_speed[land_mask] = np.nan
 
-    # 平滑流速场 - 使用适中的平滑减少不连续性
-    grid_u_smooth = gaussian_filter(grid_u, sigma=1.0)
-    grid_v_smooth = gaussian_filter(grid_v, sigma=1.0)
-    grid_speed_smooth = np.sqrt(grid_u_smooth**2 + grid_v_smooth**2)
-
     # 绘制温度填色图 - 设置在最底层
     temp_cmap = plt.get_cmap('coolwarm')  # 使用适合温度的颜色映射
     cf_temp = ax.contourf(
@@ -430,81 +439,42 @@ for i_time in range(u.shape[0]):
     ocean_mask = ~land_mask
 
     # 创建海洋区域的流速网格（陆地区域设为np.nan）
-    grid_u_ocean = np.where(ocean_mask, grid_u_smooth, np.nan)
-    grid_v_ocean = np.where(ocean_mask, grid_v_smooth, np.nan)
+    grid_u_ocean = np.where(ocean_mask, grid_u, np.nan)
+    grid_v_ocean = np.where(ocean_mask, grid_v, np.nan)
 
     # 确保grid_speed_smooth中没有NaN值
-    grid_speed_smooth_filled = np.nan_to_num(grid_speed_smooth, nan=np.nan)
+    grid_speed_filled = np.nan_to_num(grid_speed, nan=np.nan)
 
-    # 使用基于流速的加权采样生成起点 - 流速越快的地方起点越少，但不是完全没有
-    num_start_points = 200  # 起点数量
-    ocean_points = np.column_stack([grid_x[ocean_mask], grid_y[ocean_mask]])
-    ocean_speeds = grid_speed_smooth_filled[ocean_mask]
+    streamline_sum,streamline_seed=my_streamline_mutli(grid_x,grid_y,grid_u_ocean,grid_v_ocean,0.04,10,5)
 
-    # 确保没有NaN值
-    ocean_speeds = np.nan_to_num(ocean_speeds, nan=np.nan)
+    xy_ratio = ax.get_data_ratio()
+    xy_lim = ax.get_xlim(), ax.get_ylim()
 
-    # 计算权重：使用非线性函数，确保高速区域也有一定数量的起点
-    max_speed = np.max(ocean_speeds) if np.max(ocean_speeds) > 0 else 1.0
-
-    # 使用S形函数来平衡权重分布
-    # 这个函数在低速区域权重较高，高速区域权重较低，但不会降到0
-    def sigmoid_weight(speed, max_speed):
-        # 将速度归一化到0-1范围
-        normalized_speed = speed / max_speed
-        # 使用S形函数的反函数，使高速区域权重降低但不会为0
-        return 1.0 / (1.0 + np.exp(5.0 * (normalized_speed - 0.5)))
-
-    weights = sigmoid_weight(ocean_speeds, max_speed)
-
-    # 如果所有权重都是0，则使用均匀分布
-    if np.sum(weights) == 0:
-        weights = np.ones_like(weights)
-
-    weights = weights / np.sum(weights)  # 归一化
-
-    # 根据权重采样
-    if len(ocean_points) > num_start_points:
-        try:
-            selected_indices = np.random.choice(
-                len(ocean_points),
-                size=num_start_points,
-                replace=False,
-                p=weights
-            )
-            start_points = ocean_points[selected_indices]
-        except ValueError as e:
-            print(f"权重采样错误: {e}, 使用均匀采样")
-            selected_indices = np.random.choice(
-                len(ocean_points),
-                size=min(num_start_points, len(ocean_points)),
-                replace=False
-            )
-            start_points = ocean_points[selected_indices]
-    else:
-        start_points = ocean_points
-
-    # 绘制连续流线图
-    if len(start_points) > 0:
-        # 使用黑色流线，固定颜色
-        stream = ax.streamplot(
-            grid_x[:,0],  # x坐标（一维）
-            grid_y[0,:],  # y坐标（一维）
-            grid_u_ocean.T,  # 注意：需要转置以匹配streamplot的输入要求
-            grid_v_ocean.T,
-            color='black',  # 所有流线设为黑色
-            linewidth=1.2,  # 线宽
-            arrowsize=1.0,  # 箭头大小
-            arrowstyle='->',  # 箭头样式
-            minlength=0.1,  # 最小流线长度
-            maxlength=100.0,  # 最大流线长度
-            integration_direction='both',  # 双向积分
-            start_points=start_points,  # 使用加权采样的起点
-            broken_streamlines=False,    # 确保流线连续不断开
-            density=1.2,  # 适中的密度值
-            transform=proj,
-            zorder=4
-        )
+    for j in range(streamline_sum.shape[1]):
+        if streamline_sum[j].shape[0]<=1:
+            continue        # 忽略异常流线
+        ax.plot(streamline_sum[j][:,0],streamline_sum[j][:,1],'k','LineWidth',1)
+        # 绘制箭头
+        data = streamline_sum[j][-1,:]
+        x_end,y_end = lonlat_to_xy(data[0],data[1])
+        data = streamline_sum[j][-2,:]
+        x_endm1,y_endm1 = lonlat_to_xy(data[0],data[1])
+        arrow_direction=(np.array([x_end,y_end])-np.array([x_endm1,y_endm1]))
+        xy_arrow = np.array([x_end,y_end])
+        arrow_color = 'black'
+        arrow_width = 0.5
+        arrow_0 = np.array([[0,0],[-0.3,0.3],[0.8,0],[-0.3,0.3]])
+        # 归一化方向
+        a_dn = arrow_direction[:]/xy_ratio[:]
+        a_dn = a_dn/(sum(a_dn**2))**0.5
+        d = (xy_lim[3]-xy_lim[2]+xy_lim[1]-xy_lim[0])/2
+        arrow_1 = arrow_0*arrow_width*0.03*d
+        arrow_2 = arrow_1*np.array([[a_dn[0],a_dn[1]],[-a_dn[1],a_dn[0]]])
+        xy_ratio_n = xy_ratio/(sum(xy_ratio**2))**0.5             # 归一化比例尺
+        arrow_3 = arrow_2*xy_ratio_n+xy_arrow
+        xy_ratio_n2 = np.ones((3,1),dtype=float)*xy_ratio_n
+        ax.fill(arrow_3[:,0],arrow_3[:,1],color=arrow_color, edgecolor='none')
+        # plot_arrow(xy_lim,xy_ratio,[x_end,y_end], [0,0,0],0.5,arrow_direction)
 
     # 添加网格线 - 设置在最底层
     gl = ax.gridlines(crs=proj, draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--', zorder=2)

@@ -219,7 +219,7 @@ def plot_arrow(xy_lim,xy_ratio,xy_arrow,arrow_color,arrow_width,arrow_direction)
     xy_ratio_n = xy_ratio/(sum(xy_ratio**2))**0.5             # 归一化比例尺
     arrow_3 = arrow_2*xy_ratio_n+xy_arrow
     xy_ratio_n2 = np.ones((3,1),dtype=float)*xy_ratio_n
-    plt.fill(arrow_3[:,0],arrow_3[:,1],color=arrow_color, edgecolor='none')
+    ax.fill(arrow_3[:,0],arrow_3[:,1],color=arrow_color, edgecolor='none')
     # 下附原MATLAB代码:
     #
     # function plot_arrow(xy_lim,xy_ratio,xy_arrow,arrow_color,arrow_width, ...
