@@ -38,6 +38,18 @@ def calculate_normal_vector(lat1, lon1, lat2, lon2):  # 计算法向量与方位
 def calc_distance(x0,y0,x1,y1):
     return ((x1-x0)**2+(y1-y0)**2)**0.5
 
+def haversine_vectorized(lat1, lon1, lat2, lon2): # 向量化的Haversine距离计算
+    # 将十进制度数转化为弧度
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+
+    # Haversine公式
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
+    r = 6371  # 地球平均半径，单位公里
+    return c * r
+
 def interp_IDW(x, y, z, x0, y0):    # x,y自变量;z因变量;x0,y0插值点
     n_sta = len(x)
     dist = [] # 格点至所有站点的距离
@@ -54,17 +66,21 @@ def interp_IDW(x, y, z, x0, y0):    # x,y自变量;z因变量;x0,y0插值点
 if __name__ == "__main__":
     flux_all_combined = []
     time_all_combined = []
-    files = glob.glob(r'D:\Documents\Data\HYCOM\hycom_GLBv0.08_530_*.nc')
+    files = sorted(glob.glob('/mnt/oceanography/HYCOM/1994/*.nc'))
 
     # 预处理
     max_y = 1200 # 最大深度
 
     # 读取设置——注:用不到大区域故将lat_max等变量名给数据范围
     config = toml.load('config/config.toml')
-    line_start_lat = config['line_config']['start_lat']
-    line_start_lon = config['line_config']['start_lon']
-    line_end_lat = config['line_config']['end_lat']
-    line_end_lon = config['line_config']['end_lon']
+    # line_start_lat = config['line_config']['start_lat']
+    # line_start_lon = config['line_config']['start_lon']
+    # line_end_lat = config['line_config']['end_lat']
+    # line_end_lon = config['line_config']['end_lon']
+    line_start_lat = 30.5
+    line_start_lon = 124.5
+    line_end_lat = 27.5
+    line_end_lon = 128.25
     point_start_loc = (line_start_lat, line_start_lon)
     point_end_loc = (line_end_lat, line_end_lon)
     lat_max = max(point_start_loc[0], point_end_loc[0])+0.5
@@ -81,24 +97,58 @@ if __name__ == "__main__":
     points = np.column_stack((lat_list, lon_list))
 
     # === 1. 处理水深数据 ===
-    gebco_file = r'D:\Documents\Data\gebco_2024\GEBCO_2024.nc'
-    depth_data = netCDF4.Dataset(gebco_file, 'r')
-    depth_lon = depth_data.variables['lon'][:]
-    depth_lat = depth_data.variables['lat'][:]
-    depth_elevation = -depth_data.variables['elevation'][:]
+    depth_file = '/home/yzbsj/Data/海洋数据/HYCOM/expt_53.x_meanstd/regional_depth_11.nc'
+    depth_data = netCDF4.Dataset(depth_file, 'r')
+    depth_lon = depth_data.variables['Longitude'][:]
+    depth_lat = depth_data.variables['Latitude'][:]
+    depth_elevation = depth_data.variables['depth'][0,:]
     depth_data.close()
+    # 处理经纬度信息
+    loc = []
+    for i in range(depth_lon.shape[0]):
+        loc.append([])
+        for j in range(depth_lon.shape[1]):
+            loc[i].append((depth_lat[i,j],depth_lon[i, j])) # 纬度,经度
 
-    # 创建水深插值函数并插值
-    depth_interp = RegularGridInterpolator(
-        (depth_lat, depth_lon),
-        depth_elevation,
-        method='linear',
-        bounds_error=False,
-        fill_value=np.nan
+    # 计算线段上的深度
+    seafloor_depth= []
+    for i_point in range(len(points)):
+        # 假设您有二维的经纬度数组（而不是列表的列表）
+        # 如果您的数据是列表的列表，可以转换为NumPy数组
+        depth_lat_array = np.array([[point[0] for point in row] for row in loc])
+        depth_lon_array = np.array([[point[1] for point in row] for row in loc])
+
+        # 目标点
+        target_lat, target_lon = points[i_point,0],points[i_point,1]
+
+        # 计算所有点与目标点的距离
+        distances = haversine_vectorized(target_lat, target_lon, depth_lat_array, depth_lon_array)
+
+        # 找到最小距离的索引
+        min_index = np.unravel_index(np.argmin(distances), distances.shape)
+        seafloor_depth.append(depth_elevation[min_index[0],min_index[1]])
+
+    seafloor_depth = np.array(seafloor_depth)
+    # 首先获取有效数据的索引和值
+    valid_indices = np.where(~np.isnan(seafloor_depth))[0]  # 获取未屏蔽的索引
+    valid_values = seafloor_depth[valid_indices]  # 获取未屏蔽的值
+
+    # 获取所有需要插值的索引（被屏蔽的索引）
+    masked_indices = np.where(np.isnan(seafloor_depth))[0]
+
+    # 使用 np.interp 进行线性插值
+    interpolated_values = np.interp(
+        masked_indices,           # 需要插值的x坐标（索引位置）
+        valid_indices,            # 已知数据的x坐标（有效数据的索引位置）
+        valid_values              # 已知数据的y坐标（有效数据的值）
     )
-    seafloor_depth = depth_interp(points)
 
-    # 计算每一时刻
+    # 创建一个新的数组，将插值结果填充到被屏蔽的位置
+    result = seafloor_depth.copy()  # 创建原始数组的副本
+    result[masked_indices] = interpolated_values  # 用插值结果替换被屏蔽的值
+    seafloor_depth = result
+
+# 计算每一时刻
     for file in files:
         # === 2. 处理HYCOM流速数据 ===
         # 读取数据并筛选经纬度范围

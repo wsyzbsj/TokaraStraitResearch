@@ -61,10 +61,10 @@ if __name__ == "__main__":
 
     # 读取设置——注:用不到大区域故将lat_max等变量名给数据范围
     config = toml.load('config/config.toml')
-    line_start_lat = config['line_config']['start_lat']
-    line_start_lon = config['line_config']['start_lon']
-    line_end_lat = config['line_config']['end_lat']
-    line_end_lon = config['line_config']['end_lon']
+    line_start_lat = config['TK']['start_lat']
+    line_start_lon = config['TK']['start_lon']
+    line_end_lat = config['TK']['end_lat']
+    line_end_lon = config['TK']['end_lon']
     point_start_loc = (line_start_lat, line_start_lon)
     point_end_loc = (line_end_lat, line_end_lon)
     lat_max = max(point_start_loc[0], point_end_loc[0])+0.5

@@ -2,19 +2,21 @@
 [file_config]
 fvcom_file = '/home/yzbsj/文档/FVCOM/kuroshio_2024_0717/kuroshio_2024_0717.nc'
 polygon_file = '/home/yzbsj/Data/其他数据/land-polygons-complete-4326/land_polygons.shp'
+HYCOM_reanalysis_uv = '/home/yzbsj/Data/海洋数据/HYCOM/expt_53.x_meanstd/GLBv0.08_53X_archMN.*uv3z.nc'
+HYCOM_reanalysis_ts = '/home/yzbsj/Data/海洋数据/HYCOM/expt_53.x_meanstd/GLBv0.08_53X_archMN.*ts3z.nc'
 
 
 [zone_config]
 # 大区域设置
 lat_min = 20
 lat_max = 35
-lon_min = 120
-lon_max = 150
+lon_min = 115
+lon_max = 155
 # 放大区域设置
-lat_min_zoom = 28
-lat_max_zoom = 32
-lon_min_zoom = 128
-lon_max_zoom = 132
+lat_min_zoom = 25
+lat_max_zoom = 35
+lon_min_zoom = 123
+lon_max_zoom = 133
 
 [line_config]
 # 起止点位置配置
@@ -22,3 +24,20 @@ start_lon = 129.5
 start_lat = 28.4
 end_lon = 130.6
 end_lat = 31
+[line_config.current_section]
+section = 'TK'
+[line_config.PN]
+start_lat = 29.6
+start_lon = 125.5
+end_lat = 25.3
+end_lon = 131
+[line_config.TK]
+start_lat = 28.579
+start_lon = 129.75
+end_lat = 30.25
+end_lon = 130.833
+[line_config.TokaraStrait]
+start_lat = 28.4
+start_lon = 129.75
+end_lat = 30.2
+end_lon = 129.75

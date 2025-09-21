@@ -47,10 +47,14 @@ zoom_lat_min = config['zone_config']['lat_min_zoom']
 zoom_lat_max = config['zone_config']['lat_max_zoom']
 
 # 插值出距离相等的点
-line_start_lat = config['line_config']['start_lat']
-line_start_lon = config['line_config']['start_lon']
-line_end_lat = config['line_config']['end_lat']
-line_end_lon = config['line_config']['end_lon']
+# line_start_lat = config['line_config']['start_lat']
+# line_start_lon = config['line_config']['start_lon']
+# line_end_lat = config['line_config']['end_lat']
+# line_end_lon = config['line_config']['end_lon']
+line_start_lat = 29.6
+line_start_lon = 125.5
+line_end_lat = 25.3
+line_end_lon = 131
 point_start_loc = (line_start_lat, line_start_lon)
 point_end_loc = (line_end_lat, line_end_lon)
 point_start_loc = (line_start_lat, line_start_lon)
@@ -60,8 +64,8 @@ lat_list = np.linspace(point_start_loc[0], point_end_loc[0], num=num_points)
 lon_list = np.linspace(point_start_loc[1], point_end_loc[1], num=num_points)
 points = np.column_stack((lat_list, lon_list))
 
-# 读取FVCOM输出文件
-dataset = netCDF4.Dataset(r'D:\Documents\Data\gebco_2024\GEBCO_2024.nc')
+# 读取水深数据
+dataset = netCDF4.Dataset('/home/yzbsj/Data/其他数据/GEBCO/gebco_2024/GEBCO_2024.nc')
 depth_lon = dataset.variables['lon'][:]
 depth_lat = dataset.variables['lat'][:]
 depth_elevation = -dataset.variables['elevation'][:]
@@ -103,7 +107,7 @@ ax_main.plot(point_start_loc[1], point_start_loc[0], 'go', markersize=5, transfo
 ax_main.plot(point_end_loc[1], point_end_loc[0], 'ro', markersize=5, transform=ccrs.PlateCarree(), label='终点')
 
 # 添加字体
-ax_main.text(120, 30.5, 'China', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')               # 中国
+ax_main.text(117, 30.5, 'China', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')               # 中国
 ax_main.text(123, 28.5, 'East China Sea', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')    # 东中国海
 ax_main.text(131, 33, 'Japan', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')               # 日本
 ax_main.text(126, 33.5, 'Korea', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')               # 韩国
@@ -167,7 +171,7 @@ ax_zoom.pcolormesh(lon_zoom, lat_zoom, land_data,
 ax_zoom.contour(lon_zoom, lat_zoom, depth_zoom, levels=[0], colors='black', linewidths=0.5)
 
 # 绘制断面线
-ax_zoom.plot(lon_list, lat_list, 'r-', linewidth=2, transform=ccrs.Geodetic())
+ax_zoom.plot(lon_list, lat_list, 'r-', linewidth=2, transform=ccrs.PlateCarree())
 
 # 标记起点和终点
 ax_zoom.plot(point_start_loc[1], point_start_loc[0], 'go', markersize=10,
@@ -180,12 +184,12 @@ ax_zoom.text(point_start_loc[1] + 0.1, point_start_loc[0], f'起点\n{point_star
         transform=ccrs.PlateCarree(), fontsize=9)
 ax_zoom.text(point_end_loc[1] + 0.1, point_end_loc[0], f'终点\n{point_end_loc[0]}°N, {point_end_loc[1]}°E',
         transform=ccrs.PlateCarree(), fontsize=9)
-ax_zoom.text(130.7, 31.8, 'Kyushu', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')                           # 九州
+ax_zoom.text(130.5, 31.8, 'Kyushu', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')                           # 九州
 ax_zoom.text(129.5, 28.2, 'Amamioshima', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')                      # 奄美大岛
-ax_zoom.text(129.8, 29.5, 'Tokara Islands', transform=ccrs.PlateCarree(), fontsize=15, rotation=55, fontweight='bold')       # 吐噶喇群岛
-ax_zoom.text(128.5, 30.3, 'East China Sea', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')                   # 东中国海
-ax_zoom.text(130.7, 30.2, 'Yakushima', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')                   # 东中国海
-ax_zoom.text(131.1, 30.6, 'Tanegashima', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')                   # 东中国海
+ax_zoom.text(129.4, 28.8, 'Tokara Islands', transform=ccrs.PlateCarree(), fontsize=15, rotation=55, fontweight='bold')       # 吐噶喇群岛
+ax_zoom.text(126.0, 30.3, 'East China Sea', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')                   # 东中国海
+ax_zoom.text(130.6, 30.2, 'Yakushima', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')                   # 东中国海
+ax_zoom.text(130.7, 30.6, 'Tanegashima', transform=ccrs.PlateCarree(), fontsize=15, fontweight='bold')                   # 东中国海
 
 # 添加地理特征
 for ax in [ax_main, ax_zoom]:
